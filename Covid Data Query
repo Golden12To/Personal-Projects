@@ -1,0 +1,155 @@
+#Select data that we are using
+
+SELECT location, date, total_cases, new_cases, total_deaths, population
+FROM `dotted-ranger-378411.covid_data.covid_deaths`
+order by 1,2
+
+--
+
+#Total cases vs total deaths in Canada
+#Showing the likelihood of dying if you contract covid in Canada
+
+SELECT location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 AS percentage_of_deaths_to_cases 
+FROM `dotted-ranger-378411.covid_data.covid_deaths`
+WHERE location = "Canada"
+order by 1, 2
+
+--
+
+#Total cases vs the population of Canada
+#Shows percentage of population in Canada who got Covid
+
+SELECT location, date, total_cases, population, (total_cases/population)*100 AS percentage_of_cases_to_population 
+FROM `dotted-ranger-378411.covid_data.covid_deaths`
+WHERE location = "Canada"
+order by 1, 2
+
+--
+
+#Countries with the highest infection rates, compared to country's population
+
+SELECT location, MAX(total_cases) AS Highest_Infection_Count, population, MAX((total_cases/population))*100 AS highest_infection_rate
+FROM `dotted-ranger-378411.covid_data.covid_deaths`
+GROUP BY Location, Population
+order by highest_infection_rate desc
+
+--
+
+#Countries with highest death rate
+
+SELECT location, MAX(total_deaths) AS Total_Death_Count
+FROM `dotted-ranger-378411.covid_data.covid_deaths`
+WHERE continent is NOT NULL
+GROUP BY Location
+order by Total_Death_Count desc
+
+-- 
+
+#Breaking things down by continent: Continents with the highest death rate
+
+SELECT continent, MAX(total_deaths) AS Total_Death_Count
+FROM `dotted-ranger-378411.covid_data.covid_deaths`
+WHERE continent is NOT NULL
+GROUP BY continent
+order by Total_Death_Count DESC 
+
+--
+
+#Global numbers
+
+#Death percentage by date
+
+SELECT, date, SUM(new_cases) AS total_new_cases, SUM(new_deaths) AS total_new_deaths, SUM(new_deaths)/NULLIF(SUM(new_cases),0)*100 AS Death_Percentage
+FROM `dotted-ranger-378411.covid_data.covid_deaths`
+WHERE continent IS NOT NULL
+GROUP BY date
+ORDER BY 1, 2
+
+--
+
+#Total death percentage across all dates
+
+SELECT SUM(new_cases) AS total_new_cases, SUM(new_deaths) AS total_new_deaths, SUM(new_deaths)/NULLIF(SUM(new_cases),0)*100 AS Death_Percentage
+FROM `dotted-ranger-378411.covid_data.covid_deaths`
+WHERE continent IS NOT NULL
+--GROUP BY date
+ORDER BY 1, 2
+
+--
+
+#Joining covid deaths and covid vaccination tables together on date and location
+
+SELECT *
+FROM `dotted-ranger-378411.covid_data.covid_deaths` dea
+JOIN `dotted-ranger-378411.covid_data.Covid_Vaccinations` vac
+ON dea.location = vac.location
+AND dea.date = vac. date
+
+--
+
+#Look at total population vs vaccinations
+
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations 
+FROM `dotted-ranger-378411.covid_data.covid_deaths` dea
+JOIN `dotted-ranger-378411.covid_data.Covid_Vaccinations` vac
+ON dea.location = vac.location  
+AND dea.date = vac. date
+WHERE dea.continent is NOT NULL
+ORDER BY 1,2,3
+
+--
+
+#Rolling count of new vaccinations by day in Canada
+
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS Rolling_sum_of_vaccs_in_Canada
+FROM `dotted-ranger-378411.covid_data.covid_deaths` dea
+JOIN `dotted-ranger-378411.covid_data.Covid_Vaccinations` vac
+ON dea.location = vac.location  
+AND dea.date = vac.date
+WHERE dea.continent is NOT NULL AND dea.location = "Canada"
+ORDER BY 1,2,3
+
+--
+
+#What % of Canada is vaccinated? (The ratio between number of people vaccinated in Canada VS total population in Canada)
+#USING CTE
+
+WITH CanadaPopsVsVaccs AS (
+  SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+         SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS Rolling_sum_of_vaccs_in_Canada
+  FROM `dotted-ranger-378411.covid_data.covid_deaths` dea
+  JOIN `dotted-ranger-378411.covid_data.Covid_Vaccinations` vac
+    ON dea.location = vac.location AND dea.date = vac.date
+  WHERE dea.continent is NOT NULL AND dea.location = "Canada"
+)
+SELECT *, (Rolling_sum_of_vaccs_in_Canada/population)*100  
+FROM CanadaPopsVsVaccs
+ORDER BY 1, 2, 3;
+
+#Using Temp Tables
+
+DROP TABLE if exists covid_data.Canada_Percent_Population_Vaccinatedd
+CREATE TABLE covid_data.Canada_Percent_Population_Vaccinated
+(Continent STRING,
+  Location STRING,
+  Date DATE,
+  Population INT64,
+  new_vaccinations INT64,
+  Rolling_sum_of_vaccs_in_Canada INT64);
+INSERT INTO covid_data.Canada_Percent_Population_Vaccinated
+  SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+         SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS Rolling_sum_of_vaccs_in_Canada
+  FROM `dotted-ranger-378411.covid_data.covid_deaths` dea
+  JOIN `dotted-ranger-378411.covid_data.Covid_Vaccinations` vac
+    ON dea.location = vac.location AND dea.date = vac.date
+  WHERE dea.continent is NOT NULL AND dea.location = "Canada";
+
+SELECT *, (Rolling_sum_of_vaccs_in_Canada/population)*100  
+FROM covid_data.Canada_Percent_Population_Vaccinated
+ORDER BY 1, 2, 3;
+
+--
+
+#Creating a view to store data for later visualisations
+
+m
