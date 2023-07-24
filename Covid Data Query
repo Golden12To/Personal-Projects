@@ -149,7 +149,3 @@ FROM covid_data.Canada_Percent_Population_Vaccinated
 ORDER BY 1, 2, 3;
 
 --
-
-#Creating a view to store data for later visualisations
-
-m
